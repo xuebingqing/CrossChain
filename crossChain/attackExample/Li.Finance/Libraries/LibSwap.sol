@@ -29,32 +29,32 @@ library LibSwap {
 
     function swap(bytes32 transactionId, SwapData calldata _swapData) internal {
         uint256 fromAmount = _swapData.fromAmount;
-        uint256 toAmount = LibAsset.getOwnBalance(_swapData.receivingAssetId);
+        // uint256 toAmount = LibAsset.getOwnBalance(_swapData.receivingAssetId);
         address fromAssetId = _swapData.sendingAssetId;
-        if (!LibAsset.isNativeAsset(fromAssetId) && LibAsset.getOwnBalance(fromAssetId) < fromAmount) {
-            LibAsset.transferFromERC20(_swapData.sendingAssetId, msg.sender, address(this), fromAmount);
-        }
+        // if (!LibAsset.isNativeAsset(fromAssetId) && LibAsset.getOwnBalance(fromAssetId) < fromAmount) {
+        //     LibAsset.transferFromERC20(_swapData.sendingAssetId, msg.sender, address(this), fromAmount);
+        // }
 
-        if (!LibAsset.isNativeAsset(fromAssetId)) {
-            LibAsset.approveERC20(IERC20(fromAssetId), _swapData.approveTo, fromAmount);
-        }
+        // if (!LibAsset.isNativeAsset(fromAssetId)) {
+        //     LibAsset.approveERC20(IERC20(fromAssetId), _swapData.approveTo, fromAmount);
+        // }
 
         // solhint-disable-next-line avoid-low-level-calls
         (bool success, bytes memory res) = _swapData.callTo.call{ value: msg.value }(_swapData.callData);
-        if (!success) {
-            string memory reason = LibUtil.getRevertMsg(res);
-            revert(reason);
-        }
+        // if (!success) {
+        //     string memory reason = LibUtil.getRevertMsg(res);
+        //     revert(reason);
+        // }
 
-        toAmount = LibAsset.getOwnBalance(_swapData.receivingAssetId) - toAmount;
-        emit AssetSwapped(
-            transactionId,
-            _swapData.callTo,
-            _swapData.sendingAssetId,
-            _swapData.receivingAssetId,
-            fromAmount,
-            toAmount,
-            block.timestamp
-        );
+        // toAmount = LibAsset.getOwnBalance(_swapData.receivingAssetId) - toAmount;
+        // emit AssetSwapped(
+        //     transactionId,
+        //     _swapData.callTo,
+        //     _swapData.sendingAssetId,
+        //     _swapData.receivingAssetId,
+        //     fromAmount,
+        //     toAmount,
+        //     block.timestamp
+        // );
     }
 }

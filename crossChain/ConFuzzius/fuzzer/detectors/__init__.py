@@ -16,10 +16,27 @@ from .unsafe_delegatecall import UnsafeDelegatecallDetector
 from .leaking_ether import LeakingEtherDetector
 from .locking_ether import LockingEtherDetector
 from .unprotected_selfdestruct import UnprotectedSelfdestructDetector
+from .interface_compatibility import InterfaceCompatibilityDetector
+from .uncheck_token_type import UncheckTokenTypeDetector
+from .uncheck_address_parameter import UncheckAddressParameterDetector
+from .signature_verification_missing import SignatureVerificationMissingDetector
+from .init_error import InitErrorDetector
+
+
+
 
 class DetectorExecutor:
-    def __init__(self, source_map=None, function_signature_mapping={}):
+    def __init__(self, source_map=None, attack_contract_source_map=None,token_contract_source_map=None,token_interface_name=[],function_signature_mapping={}):
         self.source_map = source_map
+
+        ## 新增token的所有ABI
+        self.contract_dict={}
+
+        self.fake_address=[]
+
+        # 新增generator
+        self.generator = None
+
         self.function_signature_mapping = function_signature_mapping
         self.logger = initialize_logger("Detector")
 
@@ -34,6 +51,12 @@ class DetectorExecutor:
         self.leaking_ether_detector = LeakingEtherDetector()
         self.locking_ether_detector = LockingEtherDetector()
         self.unprotected_selfdestruct_detector = UnprotectedSelfdestructDetector()
+        self.interface_compatibility = InterfaceCompatibilityDetector()
+        self.uncheck_token_type = UncheckTokenTypeDetector()
+        self.uncheck_address_parameter = UncheckAddressParameterDetector()
+        self.signature_verification_missing = SignatureVerificationMissingDetector()
+        self.init_error = InitErrorDetector()
+
 
     def initialize_detectors(self):
         self.integer_overflow_detector.init()
@@ -47,6 +70,7 @@ class DetectorExecutor:
         self.leaking_ether_detector.init()
         self.locking_ether_detector.init()
         self.unprotected_selfdestruct_detector.init()
+        self.init_error.init()
 
     @staticmethod
     def error_exists(errors, type):
@@ -218,14 +242,117 @@ class DetectorExecutor:
             self.logger.title(color+"-----------------------------------------------------")
             print_individual_solution_as_transaction(self.logger, individual.solution, color, self.function_signature_mapping, index)
 
-        pc, index = self.unchecked_return_value_detector.detect_unchecked_return_value(previous_instruction, current_instruction, tainted_record, transaction_index)
-        if pc and DetectorExecutor.add_error(errors, pc, "Unchecked Return Value", individual, mfe, self.unchecked_return_value_detector, self.source_map):
-            color = DetectorExecutor.get_color_for_severity(self.unchecked_return_value_detector.severity)
+        # pc, index = self.unchecked_return_value_detector.detect_unchecked_return_value(previous_instruction, current_instruction, tainted_record, transaction_index,self.contract_dict)
+        # if pc and DetectorExecutor.add_error(errors, pc, "Unchecked Return Value", individual, mfe, self.unchecked_return_value_detector, self.source_map):
+        #     color = DetectorExecutor.get_color_for_severity(self.unchecked_return_value_detector.severity)
+        #     self.logger.title(color+"-----------------------------------------------------")
+        #     self.logger.title(color+"        !!! Unchecked return value detected !!!         ")
+        #     self.logger.title(color+"-----------------------------------------------------")
+        #     self.logger.title(color+"SWC-ID:   "+str(self.unchecked_return_value_detector.swc_id))
+        #     self.logger.title(color+"Severity: "+self.unchecked_return_value_detector.severity)
+        #     self.logger.title(color+"-----------------------------------------------------")
+        #     if self.source_map and self.source_map.get_buggy_line(pc):
+        #         self.logger.title(color+"Source code line:")
+        #         self.logger.title(color+"-----------------------------------------------------")
+        #         line = self.source_map.get_location(pc)['begin']['line'] + 1
+        #         column = self.source_map.get_location(pc)['begin']['column'] + 1
+        #         self.logger.title(color+self.source_map.source.filename+":"+str(line)+":"+str(column))
+        #         self.logger.title(color+self.source_map.get_buggy_line(pc))
+
+        #         # 这里选择function 
+        #         callerfunction=self.source_map.get_buggy_line(pc)
+        #         spotSite=callerfunction.find(".")
+                
+        #         # todo spotSite位置的判断
+
+        #         kuohaoSite=callerfunction.find("(",spotSite)
+        #         calledfunction=callerfunction[spotSite+1:kuohaoSite]
+
+        #         self.logger.title(color+"-----------------------------------------------------")
+        #     self.logger.title(color+"Transaction sequence:")
+        #     self.logger.title(color+"-----------------------------------------------------")
+        #     print_individual_solution_as_transaction(self.logger, individual.solution, color, self.function_signature_mapping, index)
+
+
+        # 这里存在一些问题，比如token 的ABI不在这里面
+        # pc, index = self.interface_compatibility.detect_interface_compatibility(previous_instruction, current_instruction, tainted_record, transaction_index,self.contract_dict,self.source_map)
+        # if pc and DetectorExecutor.add_error(errors, pc, "Interface compatibility", individual, mfe, self.unchecked_return_value_detector, self.source_map):
+        #     color = DetectorExecutor.get_color_for_severity(self.unchecked_return_value_detector.severity)
+        #     self.logger.title(color+"-----------------------------------------------------")
+        #     self.logger.title(color+"        !!! Interface compatibility detected !!!         ")
+        #     self.logger.title(color+"-----------------------------------------------------")
+        #     # self.logger.title(color+"SWC-ID:   "+str(self.unchecked_return_value_detector.swc_id))
+        #     self.logger.title(color+"Severity: "+self.unchecked_return_value_detector.severity)
+        #     self.logger.title(color+"-----------------------------------------------------")
+        #     if self.source_map and self.source_map.get_buggy_line(pc):
+        #         self.logger.title(color+"Source code line:")
+        #         self.logger.title(color+"-----------------------------------------------------")
+        #         line = self.source_map.get_location(pc)['begin']['line'] + 1
+        #         column = self.source_map.get_location(pc)['begin']['column'] + 1
+        #         self.logger.title(color+self.source_map.source.filename+":"+str(line)+":"+str(column))
+        #         self.logger.title(color+self.source_map.get_buggy_line(pc))
+
+        #         # 这里选择function 
+        #         callerfunction=self.source_map.get_buggy_line(pc)
+        #         spotSite=callerfunction.find(".")
+                
+        #         # todo spotSite位置的判断
+
+        #         kuohaoSite=callerfunction.find("(",spotSite)
+        #         calledfunction=callerfunction[spotSite+1:kuohaoSite]
+
+        #         self.logger.title(color+"-----------------------------------------------------")
+        #     self.logger.title(color+"Transaction sequence:")
+        #     self.logger.title(color+"-----------------------------------------------------")
+        #     print_individual_solution_as_transaction(self.logger, individual.solution, color, self.function_signature_mapping, index)
+
+
+        # 新增uncheck_token_type的检测
+        pc, index = self.uncheck_token_type.detect_uncheck_token_type(tainted_record, current_instruction, transaction_index)
+        if pc and DetectorExecutor.add_error(errors, pc, "Uncheck Token Type", individual, mfe, self.unchecked_return_value_detector, self.source_map):
+            color = DetectorExecutor.get_color_for_severity(self.uncheck_token_type.severity)
             self.logger.title(color+"-----------------------------------------------------")
-            self.logger.title(color+"        !!! Unchecked return value detected !!!         ")
+            self.logger.title(color+"        !!! Uncheck Token Type detected !!!         ")
             self.logger.title(color+"-----------------------------------------------------")
-            self.logger.title(color+"SWC-ID:   "+str(self.unchecked_return_value_detector.swc_id))
-            self.logger.title(color+"Severity: "+self.unchecked_return_value_detector.severity)
+            # self.logger.title(color+"SWC-ID:   "+str(self.unchecked_return_value_detector.swc_id))
+            self.logger.title(color+"Severity: "+self.uncheck_token_type.severity)
+            self.logger.title(color+"-----------------------------------------------------")
+            if self.source_map and self.source_map.get_buggy_line(pc):
+                self.logger.title(color+"Source code line:")
+                self.logger.title(color+"-----------------------------------------------------")
+                line = self.source_map.get_location(pc)['begin']['line'] + 1
+                column = self.source_map.get_location(pc)['begin']['column'] + 1
+                self.logger.title(color+self.source_map.source.filename+":"+str(line)+":"+str(column))
+                self.logger.title(color+self.source_map.get_buggy_line(pc))
+
+                # 这里选择function 
+                callerfunction=self.source_map.get_buggy_line(pc)
+                spotSite=callerfunction.find(".")
+                
+                # todo spotSite位置的判断
+
+                kuohaoSite=callerfunction.find("(",spotSite)
+                calledfunction=callerfunction[spotSite+1:kuohaoSite]
+
+                self.logger.title(color+"-----------------------------------------------------")
+            self.logger.title(color+"Transaction sequence:")
+            self.logger.title(color+"-----------------------------------------------------")
+            print_individual_solution_as_transaction(self.logger, individual.solution, color, self.function_signature_mapping, index)
+
+
+        # 新增初始化错误
+
+
+
+        
+        pc, index = self.init_error.detect_init_error(current_instruction, tainted_record, transaction_index,self.contract_dict,self.source_map)
+        if pc and DetectorExecutor.add_error(errors, pc, "Init Error", individual, mfe, self.unprotected_selfdestruct_detector, self.source_map):
+            color = DetectorExecutor.get_color_for_severity(self.init_error.severity)
+            self.logger.title(color+"-----------------------------------------------------")
+            self.logger.title(color+"      !!! Init Error detected !!!      ")
+            self.logger.title(color+"-----------------------------------------------------")
+            self.logger.title(color+"SWC-ID:   "+str(self.init_error.swc_id))
+            self.logger.title(color+"Severity: "+self.init_error.severity)
             self.logger.title(color+"-----------------------------------------------------")
             if self.source_map and self.source_map.get_buggy_line(pc):
                 self.logger.title(color+"Source code line:")
@@ -238,6 +365,31 @@ class DetectorExecutor:
             self.logger.title(color+"Transaction sequence:")
             self.logger.title(color+"-----------------------------------------------------")
             print_individual_solution_as_transaction(self.logger, individual.solution, color, self.function_signature_mapping, index)
+
+
+
+
+        pc, index = self.unprotected_selfdestruct_detector.detect_unprotected_selfdestruct(current_instruction, tainted_record, individual, transaction_index)
+        if pc and DetectorExecutor.add_error(errors, pc, "Unprotected Selfdestruct", individual, mfe, self.unprotected_selfdestruct_detector, self.source_map):
+            color = DetectorExecutor.get_color_for_severity(self.unprotected_selfdestruct_detector.severity)
+            self.logger.title(color+"-----------------------------------------------------")
+            self.logger.title(color+"      !!! Unprotected selfdestruct detected !!!      ")
+            self.logger.title(color+"-----------------------------------------------------")
+            self.logger.title(color+"SWC-ID:   "+str(self.unprotected_selfdestruct_detector.swc_id))
+            self.logger.title(color+"Severity: "+self.unprotected_selfdestruct_detector.severity)
+            self.logger.title(color+"-----------------------------------------------------")
+            if self.source_map and self.source_map.get_buggy_line(pc):
+                self.logger.title(color+"Source code line:")
+                self.logger.title(color+"-----------------------------------------------------")
+                line = self.source_map.get_location(pc)['begin']['line'] + 1
+                column = self.source_map.get_location(pc)['begin']['column'] + 1
+                self.logger.title(color+self.source_map.source.filename+":"+str(line)+":"+str(column))
+                self.logger.title(color+self.source_map.get_buggy_line(pc))
+                self.logger.title(color+"-----------------------------------------------------")
+            self.logger.title(color+"Transaction sequence:")
+            self.logger.title(color+"-----------------------------------------------------")
+            print_individual_solution_as_transaction(self.logger, individual.solution, color, self.function_signature_mapping, index)
+
 
         pc, index = self.unsafe_delegatecall_detector.detect_unsafe_delegatecall(current_instruction, tainted_record, individual, previous_instruction, transaction_index)
         if pc and DetectorExecutor.add_error(errors, pc, "Unsafe Delegatecall", individual, mfe, self.unsafe_delegatecall_detector, self.source_map):
@@ -322,3 +474,41 @@ class DetectorExecutor:
             self.logger.title(color+"Transaction sequence:")
             self.logger.title(color+"-----------------------------------------------------")
             print_individual_solution_as_transaction(self.logger, individual.solution, color, self.function_signature_mapping, index)
+
+
+        pc, index = self.uncheck_address_parameter.detect_uncheck_address_parameter(tainted_record, current_instruction, transaction_index ,self.generator.fake_address)
+        if pc and DetectorExecutor.add_error(errors, pc, "Uncheck Address Parameter detected", individual, mfe, self.unprotected_selfdestruct_detector, self.source_map):
+            color = DetectorExecutor.get_color_for_severity(self.uncheck_address_parameter.severity)
+            self.logger.title(color+"-----------------------------------------------------")
+            self.logger.title(color+"      !!! Uncheck Address Parameter detected !!!      ")
+            self.logger.title(color+"-----------------------------------------------------")
+            self.logger.title(color+"SWC-ID:   "+str(self.uncheck_address_parameter.swc_id))
+            self.logger.title(color+"Severity: "+self.uncheck_address_parameter.severity)
+            self.logger.title(color+"-----------------------------------------------------")
+            if self.source_map and self.source_map.get_buggy_line(pc):
+                self.logger.title(color+"Source code line:")
+                self.logger.title(color+"-----------------------------------------------------")
+                line = self.source_map.get_location(pc)['begin']['line'] + 1
+                column = self.source_map.get_location(pc)['begin']['column'] + 1
+                self.logger.title(color+self.source_map.source.filename+":"+str(line)+":"+str(column))
+                self.logger.title(color+self.source_map.get_buggy_line(pc))
+                self.logger.title(color+"-----------------------------------------------------")
+            self.logger.title(color+"Transaction sequence:")
+            self.logger.title(color+"-----------------------------------------------------")
+            print_individual_solution_as_transaction(self.logger, individual.solution, color, self.function_signature_mapping, index)
+
+        # 新增签名验证缺失
+        pc, index = self.signature_verification_missing.detect_signature_verification_missing(tainted_record, current_instruction, transaction_index)
+        if pc and DetectorExecutor.add_error(errors, pc, "Signature Verification Missing", individual, mfe, self.unprotected_selfdestruct_detector, self.source_map):
+            color = DetectorExecutor.get_color_for_severity(self.signature_verification_missing.severity)
+            self.logger.title(color+"-----------------------------------------------------")
+            self.logger.title(color+"      !!! Signature Verification Missing detected !!!      ")
+            self.logger.title(color+"-----------------------------------------------------")
+            self.logger.title(color+"SWC-ID:   "+str(self.signature_verification_missing.swc_id))
+            self.logger.title(color+"Severity: "+self.signature_verification_missing.severity)
+            self.logger.title(color+"-----------------------------------------------------")
+            self.logger.title(color+"Transaction sequence:")
+            self.logger.title(color+"-----------------------------------------------------")
+            print_individual_solution_as_transaction(self.logger, individual.solution, color, self.function_signature_mapping, index)
+
+

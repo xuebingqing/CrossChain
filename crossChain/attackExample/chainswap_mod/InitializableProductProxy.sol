@@ -806,7 +806,7 @@ library Address {
         bytes32 codehash;
         bytes32 accountHash = 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
         // solhint-disable-next-line no-inline-assembly
-        assembly { codehash := extcodehash(account) }
+        // assembly { codehash := extcodehash(account) }
         return (codehash != accountHash && codehash != 0x0);
     }
 
@@ -1530,25 +1530,26 @@ abstract contract MappingBase is ContextUpgradeSafe, Constants {
     
     function _sendFrom(address from, uint volume) virtual internal;
 
+    // function receive(uint256 fromChainId, address to, uint256 nonce, uint256 volume, Signature[] memory signatures) virtual external payable {
     function receive(uint256 fromChainId, address to, uint256 nonce, uint256 volume, Signature[] memory signatures) virtual external payable {
-        _chargeFee();
-        require(received[fromChainId][to][nonce] == 0, 'withdrawn already');
+        // _chargeFee();
+        // require(received[fromChainId][to][nonce] == 0, 'withdrawn already');
         uint N = signatures.length;
-        require(N >= MappingTokenFactory(factory).getConfig(_minSignatures_), 'too few signatures');
+        // require(N >= MappingTokenFactory(factory).getConfig(_minSignatures_), 'too few signatures');
         for(uint i=0; i<N; i++) {
             for(uint j=0; j<i; j++)
                 require(signatures[i].signatory != signatures[j].signatory, 'repetitive signatory');
             bytes32 structHash = keccak256(abi.encode(RECEIVE_TYPEHASH, fromChainId, to, nonce, volume, signatures[i].signatory));
             bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _DOMAIN_SEPARATOR, structHash));
             address signatory = ecrecover(digest, signatures[i].v, signatures[i].r, signatures[i].s);
-            require(signatory != address(0), "invalid signature");
-            require(signatory == signatures[i].signatory, "unauthorized");
-            //减少签名者签名次数
-            _decreaseAuthQuota(signatures[i].signatory, volume);
-            emit Authorize(fromChainId, to, nonce, volume, signatory);
+            // require(signatory != address(0), "invalid signature");
+            // require(signatory == signatures[i].signatory, "unauthorized");
+            // //减少签名者签名次数
+            // _decreaseAuthQuota(signatures[i].signatory, volume);
+            // emit Authorize(fromChainId, to, nonce, volume, signatory);
         }
         received[fromChainId][to][nonce] = volume;
-        _receive(to, volume);
+        // _receive(to, volume);
         emit Receive(fromChainId, to, nonce, volume);
     }
     event Receive(uint256 indexed fromChainId, address indexed to, uint256 indexed nonce, uint256 volume);
@@ -1958,13 +1959,13 @@ contract MappingTokenFactory is ContextUpgradeSafe, Configurable, Constants {
         bytes32 salt = keccak256(abi.encodePacked(_chainId(), token));
 
         bytes memory bytecode = type(InitializableProductProxy).creationCode;
-        assembly {
-            tokenMapped := create2(0, add(bytecode, 32), mload(bytecode), salt)
-        }
-        InitializableProductProxy(payable(tokenMapped)).__InitializableProductProxy_init(address(this), _TokenMapped_, abi.encodeWithSignature('__TokenMapped_init(address,address)', address(this), token));
+        // assembly {
+        //     tokenMapped := create2(0, add(bytecode, 32), mload(bytecode), salt)
+        // }
+        // InitializableProductProxy(payable(tokenMapped)).__InitializableProductProxy_init(address(this), _TokenMapped_, abi.encodeWithSignature('__TokenMapped_init(address,address)', address(this), token));
         
-        tokenMappeds[token] = tokenMapped;
-        emit CreateTokenMapped(_msgSender(), token, tokenMapped);
+        // tokenMappeds[token] = tokenMapped;
+        // emit CreateTokenMapped(_msgSender(), token, tokenMapped);
     }
     event CreateTokenMapped(address indexed creator, address indexed token, address indexed tokenMapped);
     
@@ -1975,12 +1976,12 @@ contract MappingTokenFactory is ContextUpgradeSafe, Configurable, Constants {
         bytes32 salt = keccak256(abi.encodePacked(_chainId(), _msgSender()));
 
         bytes memory bytecode = type(InitializableProductProxy).creationCode;
-        assembly {
-            mappableToken := create2(0, add(bytecode, 32), mload(bytecode), salt)
-        }
-        InitializableProductProxy(payable(mappableToken)).__InitializableProductProxy_init(address(this), _MappableToken_, abi.encodeWithSignature('__MappableToken_init(address,address,string,string,uint8,uint256)', address(this), _msgSender(), name, symbol, decimals, totalSupply));
+        // assembly {
+        //     mappableToken := create2(0, add(bytecode, 32), mload(bytecode), salt)
+        // }
+        // InitializableProductProxy(payable(mappableToken)).__InitializableProductProxy_init(address(this), _MappableToken_, abi.encodeWithSignature('__MappableToken_init(address,address,string,string,uint8,uint256)', address(this), _msgSender(), name, symbol, decimals, totalSupply));
         
-        mappableTokens[_msgSender()] = mappableToken;
+        // mappableTokens[_msgSender()] = mappableToken;
         emit CreateMappableToken(_msgSender(), name, symbol, decimals, totalSupply, mappableToken);
     }
     event CreateMappableToken(address indexed creator, string name, string symbol, uint8 decimals, uint totalSupply, address indexed mappableToken);
@@ -1993,13 +1994,13 @@ contract MappingTokenFactory is ContextUpgradeSafe, Configurable, Constants {
         bytes32 salt = keccak256(abi.encodePacked(mainChainId, tokenOrCreator));
 
         bytes memory bytecode = type(InitializableProductProxy).creationCode;
-        assembly {
-            mappingToken := create2(0, add(bytecode, 32), mload(bytecode), salt)
-        }
-        InitializableProductProxy(payable(mappingToken)).__InitializableProductProxy_init(address(this), _MappingToken_, abi.encodeWithSignature('__MappingToken_init(address,uint256,address,address,string,string,uint8,uint256)', address(this), mainChainId, token, creator, name, symbol, decimals, cap));
+        // assembly {
+        //     mappingToken := create2(0, add(bytecode, 32), mload(bytecode), salt)
+        // }
+        // InitializableProductProxy(payable(mappingToken)).__InitializableProductProxy_init(address(this), _MappingToken_, abi.encodeWithSignature('__MappingToken_init(address,uint256,address,address,string,string,uint8,uint256)', address(this), mainChainId, token, creator, name, symbol, decimals, cap));
         
-        mappingTokens[mainChainId][tokenOrCreator] = mappingToken;
-        emit CreateMappingToken(mainChainId, token, creator, name, symbol, decimals, cap, mappingToken);
+        // mappingTokens[mainChainId][tokenOrCreator] = mappingToken;
+        // emit CreateMappingToken(mainChainId, token, creator, name, symbol, decimals, cap, mappingToken);
     }
     event CreateMappingToken(uint mainChainId, address indexed token, address indexed creator, string name, string symbol, uint8 decimals, uint cap, address indexed mappingToken);
     

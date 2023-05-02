@@ -15,7 +15,7 @@ class UncheckedReturnValueDetector():
         self.exceptions = {}
         self.external_function_calls = {}
 
-    def detect_unchecked_return_value(self, previous_instruction, current_instruction, tainted_record, transaction_index):
+    def detect_unchecked_return_value(self, previous_instruction, current_instruction, tainted_record, transaction_index,contract_dict):
         # Register all exceptions
         if previous_instruction and previous_instruction["op"] in ["CALL", "CALLCODE", "DELEGATECALL", "STATICCALL"] and convert_stack_value_to_int(current_instruction["stack"][-1]) == 1:
             if tainted_record and tainted_record.stack and tainted_record.stack[-1] and is_expr(tainted_record.stack[-1][0]):
@@ -34,6 +34,8 @@ class UncheckedReturnValueDetector():
         # Register all external function calls
         if current_instruction["op"] == "CALL" and convert_stack_value_to_int(current_instruction["stack"][-5]) > 0:
             self.external_function_calls[convert_stack_value_to_int(current_instruction["stack"][-6])] = current_instruction["pc"], transaction_index
+            # print(hex(convert_stack_value_to_int(current_instruction['stack'][-2])))
+            contract_function_name=contract_dict[hex(convert_stack_value_to_int(current_instruction['stack'][-2]))]
         # Register return values
         elif current_instruction["op"] == "MLOAD" and self.external_function_calls:
             return_value_offset = convert_stack_value_to_int(current_instruction["stack"][-1])

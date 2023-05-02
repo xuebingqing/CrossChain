@@ -29,13 +29,20 @@ from engine.fitness import fitness_function
 
 from utils import settings
 from utils.source_map import SourceMap
-from utils.utils import initialize_logger, compile, get_interface_from_abi, get_pcs_and_jumpis, get_function_signature_mapping
+from utils.utils import initialize_logger, compile, get_interface_from_abi, get_function_name_from_abi, get_pcs_and_jumpis, get_function_signature_mapping,has_deposit_function,has_depositETH_funcion,get_interface_by_function_name,parse_init_json_and_exec,get_function_name_hash_from_abi
+
 from utils.control_flow_graph import ControlFlowGraph
 
 class Fuzzer:
-    def __init__(self, contract_name, abi, deployment_bytecode, runtime_bytecode, test_instrumented_evm, blockchain_state, solver, args, seed, source_map=None):
+    # 新增了token contract 的参数
+    # 新增token代码
+    def __init__(self, contract_name, abi, deployment_bytecode, runtime_bytecode,
+                token_contract_name,token_abi,token_deployment_bytecode,
+                attck_contract_name, attack_abi,attack_deployment_bytecode, 
+                test_instrumented_evm, blockchain_state, solver, args, seed, 
+                source_map=None,attack_contract_source_map=None,token_contract_source_map=None,
+                token=None,signatory=None,initJson=None):
         global logger
-
         logger = initialize_logger("Fuzzer  ")
         logger.title("Fuzzing contract %s", contract_name)
 
@@ -44,7 +51,43 @@ class Fuzzer:
 
         self.contract_name = contract_name
         self.interface = get_interface_from_abi(abi)
+
+        # 新增deposit 和 depositETH的 interface 
+        self.deposit_interface = has_deposit_function(abi)
+
+        self.depositETH_interface = has_depositETH_funcion(abi)
+
         self.deployement_bytecode = deployment_bytecode
+
+        self.abi=abi
+
+
+        self.attack_address=""
+        #print(self.deployement_bytecode)  
+        # token 合约的接口 （abi）
+        # print(token_abi)
+        self.token_contract_name=token_contract_name
+        self.token_interface=get_interface_from_abi(token_abi)
+        self.token_deployment_bytecode = token_deployment_bytecode
+        self.token_interface_name=get_function_name_from_abi(token_abi)
+
+        # 新增token数组
+        self.token = token
+
+        # 新增signatory  
+        self.signatory = signatory
+
+        # 新增init的执行
+        self.initJson = initJson
+
+        # 新增被测合约的interface_name
+        self.interface_name = get_function_name_hash_from_abi(abi)
+
+        # attack 合约的接口
+        self.attck_contract_name=attck_contract_name
+        self.attack_interface=get_interface_from_abi(attack_abi),
+        self.attack_deployment_bytecode = attack_deployment_bytecode
+
         self.blockchain_state = blockchain_state
         self.instrumented_evm = test_instrumented_evm
         self.solver = solver
@@ -56,13 +99,14 @@ class Fuzzer:
         # Initialize results
         self.results = {"errors": {}}
 
+
         # Initialize fuzzing environment
         self.env = FuzzingEnvironment(instrumented_evm=self.instrumented_evm,
                                       contract_name=self.contract_name,
                                       solver=self.solver,
                                       results=self.results,
                                       symbolic_taint_analyzer=SymbolicTaintAnalyzer(),
-                                      detector_executor=DetectorExecutor(source_map, get_function_signature_mapping(abi)),
+                                      detector_executor=DetectorExecutor(source_map,attack_contract_source_map,token_contract_source_map, self.token_interface_name,get_function_signature_mapping(abi)),
                                       interface=self.interface,
                                       overall_pcs=self.overall_pcs,
                                       overall_jumpis=self.overall_jumpis,
@@ -75,7 +119,16 @@ class Fuzzer:
 
     def run(self):
         contract_address = None
+        
+        # 新增token 合约的地址 (multichain)
+        token_contract_address = None
+        attack_contract_address = None 
         self.instrumented_evm.create_fake_accounts()
+        self.env.detector_executor.contract_dict={}
+
+
+        paramTypeList = []
+        valueList = []
 
         if self.args.source:
             for transaction in self.blockchain_state:
@@ -111,17 +164,50 @@ class Fuzzer:
             if "constructor" in self.interface:
                 del self.interface["constructor"]
 
+            
+            # 新增token合约地址
+            if not token_contract_address:
+                if "constructor" not in self.token_interface:
+                    result = self.instrumented_evm.deploy_contract(self.instrumented_evm.accounts[0],self.token_deployment_bytecode)
+                    token_contract_address = encode_hex(result.msg.storage_address)
+                    #print("token_contract_address = ",token_contract_address)
+                    self.instrumented_evm.token_contract_acount.append(token_contract_address)
+                    self.env.nr_of_transactions+=1
+                    logger.debug("token contract deployed at %s", token_contract_address)                    
+
+            # 新增攻击合约
+            if not attack_contract_address:
+                if "constructor" not in self.attack_interface:    
+                    result = self.instrumented_evm.deploy_contract(self.instrumented_evm.accounts[0],self.attack_deployment_bytecode)
+                    attack_contract_address = encode_hex(result.msg.storage_address)
+                    #print("attack_contract_address = ",attack_contract_address)
+                    self.instrumented_evm.attack_contract_accout.append(attack_contract_address)
+                    self.env.nr_of_transactions+=1
+                    logger.debug("attack contract deployed at %s", attack_contract_address)   
+
+
             if not contract_address:
-                if "constructor" not in self.interface:
+                if "constructor" not in self.interface:                  
                     result = self.instrumented_evm.deploy_contract(self.instrumented_evm.accounts[0], self.deployement_bytecode)
                     if result.is_error:
                         logger.error("Problem while deploying contract %s using account %s. Error message: %s", self.contract_name, self.instrumented_evm.accounts[0], result._error)
                         sys.exit(-2)
-                    else:
+                    else:    
                         contract_address = encode_hex(result.msg.storage_address)
+                        #print("contract_address = ",contract_address)
                         self.instrumented_evm.accounts.append(contract_address)
                         self.env.nr_of_transactions += 1
                         logger.debug("Contract deployed at %s", contract_address)
+
+            # 输出account的地址
+            # print("account contract address ",self.instrumented_evm.token_contract_acount)
+
+            if self.initJson!=None:
+            # 执行initJson的函数
+                paramTypeList,valueList = parse_init_json_and_exec(self.initJson,self.interface_name,contract_address,self.instrumented_evm.accounts,self.env,self.interface)
+            #     # contruct_tx()
+            #     # exec_tx()
+
 
             if contract_address in self.instrumented_evm.accounts:
                 self.instrumented_evm.accounts.remove(contract_address)
@@ -131,12 +217,88 @@ class Fuzzer:
         if self.args.abi:
             contract_address = self.args.contract
 
-        self.instrumented_evm.create_snapshot()
+        self.env.detector_executor.contract_dict[token_contract_address]=self.token_interface_name
 
-        generator = Generator(interface=self.interface,
-                              bytecode=self.deployement_bytecode,
-                              accounts=self.instrumented_evm.accounts,
-                              contract=contract_address)
+        self.instrumented_evm.create_snapshot()
+        # print(self.instrumented_evm.accounts)
+        # ['0xcafebabecafebabecafebabecafebabecafebabe', '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef']
+        # print(self.instrumented_evm.token_contract_acount)
+        # ['0x2c5e8a3b3aad9df32339409534e64dfcabcd3a65']
+
+        tokenHandlerFunc = []
+        # 做 Name  和 hash  的dict
+        tokenHandlerFuncHash = {}
+
+        # 获取token的存款函数
+        # token type 和 对应的function hash
+        if self.token != None:
+            for i in range(len(self.token["function"]["name"])):
+                tokenHandlerFunc.append(self.token["function"]["name"][i])
+                tokenHandlerFuncHash[self.token["function"]["name"][i]] = get_interface_by_function_name(self.abi,self.token["function"]["name"][i])
+            self.env.token_type_check=True
+        # 传递deposit 的 functionhash 和 depositETH 的function hash 
+            generator = Generator(interface=self.interface,
+                                bytecode=self.deployement_bytecode,
+                                accounts=self.instrumented_evm.accounts,
+                                token_contract_acount=self.instrumented_evm.token_contract_acount,
+                                attack_contract_account=self.instrumented_evm.attack_contract_accout,
+                                contract=contract_address,
+                                # 新增 depositETH_interface 和 deposit_interface 
+                                deposit_interface = self.deposit_interface,
+                                depositETH_interface = self.depositETH_interface,
+                                tokenHandlerFuncHash = tokenHandlerFuncHash,
+                                tokens = self.token["token"],
+                                paramTypeList = paramTypeList,
+                                valueList = valueList
+                                )
+        
+        
+        falseSignatory=[]
+        # 获取signatory
+        if self.signatory!=None:
+            signatoryIndex = self.signatory["index"]
+            signatoryType = self.signatory["type"]
+            for i in range (len(self.signatory["false"]["signatorys"])):
+                falseSignatory.append(self.signatory["false"]["signatorys"][i])
+
+            self.env.signatory_check = True
+            # false signatory 产生
+            generator = Generator(interface=self.interface,
+                                bytecode=self.deployement_bytecode,
+                                accounts=self.instrumented_evm.accounts,
+                                token_contract_acount=self.instrumented_evm.token_contract_acount,
+                                attack_contract_account=self.instrumented_evm.attack_contract_accout,
+                                contract=contract_address,
+                                # 新增 depositETH_interface 和 deposit_interface 
+                                deposit_interface = self.deposit_interface,
+                                depositETH_interface = self.depositETH_interface,
+                                tokenHandlerFuncHash = tokenHandlerFuncHash,
+                                falseSignatorys = falseSignatory,
+                                signatoryIndex = signatoryIndex,
+                                signatoryType = signatoryType,
+                                )
+
+
+
+        if self.token==None and self.signatory==None:
+            generator = Generator(interface=self.interface,
+                                bytecode=self.deployement_bytecode,
+                                accounts=self.instrumented_evm.accounts,
+                                token_contract_acount=self.instrumented_evm.token_contract_acount,
+                                attack_contract_account=self.instrumented_evm.attack_contract_accout,
+                                contract=contract_address,
+                                # 新增 depositETH_interface 和 deposit_interface 
+                                deposit_interface = self.deposit_interface,
+                                depositETH_interface = self.depositETH_interface,
+                                tokenHandlerFuncHash = tokenHandlerFuncHash,
+                                paramTypeList = paramTypeList,
+                                valueList = valueList
+                                # tokens = self.token["token"]
+                                )
+
+        # 新增传递generator
+        self.env.detector_executor.generator =generator
+
 
         # Create initial population
         size = 2 * len(self.interface)
@@ -216,6 +378,71 @@ def main():
             logger.error("Unsupported input file: " + args.blockchain_state)
             sys.exit(-1)
 
+
+    token_contract=""
+    token_contract_name=None
+    token_contract_source_map=None
+    # 先编译token合约
+    if args.token_contract:
+        if args.source.endswith(".sol"):
+            token_compiler_output = compile(args.token_solc, settings.EVM_VERSION, args.token_contract)
+            if not token_compiler_output:
+                logger.error("No compiler output for: " + args.token_contract)
+                sys.exit(-1)
+        for contract_name, contract in token_compiler_output['contracts'][args.token_contract].items():
+            token_contract=contract
+            token_contract_name=contract_name
+            token_contract_source_map=SourceMap(':'.join([args.token_contract, contract_name]), token_compiler_output)
+    # token_contract 是 token的合约
+    # print(token_contract_name)
+        
+
+    token = None
+    if args.token_type:
+        with open(args.token_type) as json_file:
+            token = json.load(json_file)
+
+
+    signatory = None
+    # 新增签名参数
+    if args.signatory:
+        with open(args.signatory) as json_file:
+            signatory = json.load(json_file)
+
+
+    initJson = None
+    if args.init_json:
+        with open(args.init_json) as json_file:
+            initJson = json.load(json_file)
+
+
+
+    attack_contract=""
+    attck_contract_name=None
+    attack_contract_source_map=None
+    # 编译attack 合约
+    if args.attack_contract:
+        if args.source.endswith(".sol"):
+            attack_compiler_output = compile(args.attack_solc, settings.EVM_VERSION, args.attack_contract)
+            # print(attack_compiler_output)
+            if not attack_compiler_output:
+                logger.error("No compiler output for: " + args.attack_contract)
+                sys.exit(-1)
+        for contract_name, contract in attack_compiler_output['contracts'][args.attack_contract].items():
+            if contract_name==args.attack_contract_contract:
+                attack_contract=contract
+                attck_contract_name=contract_name 
+                attack_contract_source_map=SourceMap(':'.join([args.attack_contract, contract_name]), attack_compiler_output)
+            # if contract_name=="Exploit":
+            #     attack_contract=contract
+            #     attck_contract_name=contract_name 
+            #     attack_contract_source_map=SourceMap(':'.join([args.attack_contract, contract_name]), attack_compiler_output)
+            # if contract_name=="ERC20Handler":
+            #     attack_contract=contract
+            #     attck_contract_name=contract_name 
+            #     attack_contract_source_map=SourceMap(':'.join([args.attack_contract, contract_name]), attack_compiler_output)
+
+    # print(attack_contract['evm']['bytecode']['object'])
     # Compile source code to get deployment bytecode, runtime bytecode and ABI
     if args.source:
         if args.source.endswith(".sol"):
@@ -227,12 +454,21 @@ def main():
                 if args.contract and contract_name != args.contract:
                     continue
                 if contract['abi'] and contract['evm']['bytecode']['object'] and contract['evm']['deployedBytecode']['object']:
-                    source_map = SourceMap(':'.join([args.source, contract_name]), compiler_output)
-                    Fuzzer(contract_name, contract["abi"], contract['evm']['bytecode']['object'], contract['evm']['deployedBytecode']['object'], instrumented_evm, blockchain_state, solver, args, seed, source_map).run()
+                    contract_source_map = SourceMap(':'.join([args.source, contract_name]), compiler_output)
+                    Fuzzer(contract_name, contract["abi"], contract['evm']['bytecode']['object'],contract['evm']['deployedBytecode']['object'],
+                            token_contract_name, token_contract["abi"], token_contract['evm']['bytecode']['object'],
+                            attck_contract_name, 
+                            attack_contract["abi"], 
+                            attack_contract['evm']['bytecode']['object'],                           
+                            instrumented_evm, blockchain_state, solver, args, seed, 
+                            contract_source_map,attack_contract_source_map,token_contract_source_map,
+                            token,signatory,initJson).run()
+                    # Fuzzer(contract_name, contract["abi"], contract['evm']['bytecode']['object'],contract['evm']['deployedBytecode']['object'],instrumented_evm, blockchain_state, solver, args, seed, source_map).run()
+
         else:
             logger.error("Unsupported input file: " + args.source)
             sys.exit(-1)
-
+    # todo : Fuzzer 参数 需要改一下
     if args.abi:
         with open(args.abi) as json_file:
             abi = json.load(json_file)
@@ -248,6 +484,49 @@ def launch_argument_parser():
                         help="Solidity smart contract source code file (.sol).")
     group1.add_argument("-a", "--abi", type=str,
                         help="Smart contract ABI file (.json).")
+    
+    # 有别的合约依赖，所以需要指定别的合约，然后部署上去
+    # 部署token合约，需要改一下变量名
+    parser.add_argument("--token_contract",type=str,
+                        help="token contract need.")
+    
+    
+    # 别的合约可能有多个版本，所以需要指定一下
+    # todo 部署token合约，需要改一下变量名
+    parser.add_argument("--token_solc",type=str,
+                        help="Solidity compiler version")
+
+    # 部署攻击合约
+    parser.add_argument("--attack_contract",type=str,
+                        help="attack contract need.")
+    
+    parser.add_argument("--attack_contract_contract",type=str,
+                        help="attack contract contract")
+
+    # token 的数组地址
+    # ERC20 
+    parser.add_argument("--ERC20_contract",type=str)
+    # not ERC20
+    parser.add_argument("--other_contract",type=str)
+    
+
+    # token的json 文件的路径
+    parser.add_argument("--token_type",type=str,
+                        help="token type need json file")
+
+
+
+    # 攻击合约的版本
+    parser.add_argument("--attack_solc",type=str,
+                        help="attack contract compiler version")
+    
+    # 签名的参数
+    parser.add_argument("--signatory",type=str,
+                        help="signatory 的参数指定")
+    
+    # 完成初始化json的解析
+    parser.add_argument("--init_json",type=str,
+                        help="初始化json文件")    
 
     #group2 = parser.add_mutually_exclusive_group(required=True)
     parser.add_argument("-c", "--contract", type=str,

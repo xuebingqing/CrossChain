@@ -19,4 +19,11 @@ class FuzzingEnvironment:
 
         self.data_dependencies = dict()
 
+        # 新增token_type_check 
+        self.token_type_check = False 
+
+        # 新增
+        self.signatory_check = False
+
         self.__dict__.update(kwargs)
+

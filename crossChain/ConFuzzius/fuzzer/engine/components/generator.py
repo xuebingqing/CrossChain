@@ -3,6 +3,7 @@
 
 import random
 import collections
+import string
 
 from utils import settings
 from utils.utils import *
@@ -146,12 +147,22 @@ class CircularSet:
 
 
 class Generator:
-    def __init__(self, interface, bytecode, accounts, contract):
+    def __init__(self, interface, bytecode, accounts, token_contract_acount,attack_contract_account,contract,
+                # 新增两个参数
+                deposit_interface, depositETH_interface,
+                tokenHandlerFuncHash, tokens=None,
+                falseSignatorys=None,signatoryIndex=None,signatoryType=None,
+                paramTypeList= [],valueList = []
+                ):
         self.logger = initialize_logger("Generator")
         self.interface = interface
         self.bytecode = bytecode
         self.accounts = accounts
         self.contract = contract
+
+        # add token_contract_acount 
+        self.token_contract_acount=token_contract_acount
+        self.attack_contract_acount=attack_contract_account
 
         # Pools
         self.function_circular_buffer = CircularSet(set_size=len(self.interface), initial_set=set(self.interface))
@@ -168,6 +179,38 @@ class Generator:
         self.argument_array_sizes_pool = {}
         self.strings_pool = CircularSet()
         self.bytes_pool = CircularSet()
+
+
+        # 新增deposit_interface 和 depositETH_interface 
+        self.deposit_interface = deposit_interface
+        self.depositETH_interface = depositETH_interface
+        self.deposit_circular_buffer = CircularSet(set_size=len(self.deposit_interface), initial_set=set(self.deposit_interface))
+
+
+
+        # 新增token handler 和 token 
+        self.tokenHandlerFuncHash = tokenHandlerFuncHash
+        self.tokens = tokens
+
+        # 新增记录fake_address  Li.Finance
+        self.fake_address=[]
+
+
+        self.paramTypeList = paramTypeList
+        self.valueList = valueList
+
+        # 新增false falseSignatorys 
+        self.falseSignatorys = falseSignatorys
+
+        # 新增signatory 的参数位置
+        self.signatoryIndex = signatoryIndex
+
+
+        # 新增signatory 的类型参数
+        self.signatoryType = signatoryType
+
+
+
 
     def generate_random_individual(self):
         individual = []
@@ -186,11 +229,107 @@ class Generator:
                 "gaslimit": self.get_random_gaslimit("constructor"),
                 "returndatasize": dict()
             })
+        
 
         function, argument_types = self.get_random_function_with_argument_types()
+        print("function = ",function)        
+        print("argument_types = ",argument_types)
         arguments = [function]
+
+
+        # meter
+        # arguments.append()
+
+        # multichain
+        # address from
+        # arguments.append('0x7f4bae93c21b03836d20933ff55d9f77e5b8d34d')
+        # # token
+        # arguments.append(self.get_random_argument(argument_types[1], function, 1))
+        # # arguments.append(self.attack_contract_acount[0])
+        # # to
+        # arguments.append('0x4986e9017ea60e7afcd10d844f85c80912c3863c')
+        # # amount
+        # arguments.append(100)
+        # # deadline
+        # arguments.append(2)
+        # # v
+        # arguments.append(0)
+        # # r
+        # arguments.append(self.get_random_argument(argument_types[6], function, 6))
+        # # s
+        # arguments.append(self.get_random_argument(argument_types[6], function, 6))
+        # # toChainID
+        # arguments.append(56)          
+
+
+
+ 
+        # 现在只考虑deposit函数
+        # todo 改为通过参数配置来选择到底怎么执行
+
+
+        # # todo 替换成随机数
+        # token_index = self.tokens[0]["index"]
+
+
+        # # function, argument_types = self.get_random_deposit_with_argument_types()
+        # function, argument_types = self.get_random_token_handler_func_with_argument_types(self.tokens[0]["function"])
+        # arguments = [function]
+
+
+
+        # arguments.append(2)  
+        # arguments.append(int.to_bytes(int(self.tokens[0]["resourceID"]),byteorder='big',length=32 ))
+        # # arguments.append(int.to_bytes(273739586996562601137320895006645807795033755704321,byteorder='big',length=32))
+        # # arguments.append(273739586996562601137320895006645807795033755704321)  
+        # arguments.append(self.get_random_argument(argument_types[2], function, 2))       
+
+
+        
+
+
+
+        # argument.append()
+
+
+
+        # arguments.append(bytearray(bytes.fromhex('0000000000000000000000bb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c01')))
+        # arguments.append(self.get_random_argument(argument_types[1], function, 1))
+        # arguments.append(bytearray(bytes.fromhex('000000000000000000000000000000000000000000000000000000000000006900000000000000000000000000000000000000000000000a4cc799563c380000000000000000000000000000d01ae1a708614948b2b5e0b7ab5be6afa01325c7')))
+        # arguments.append(bytearray(bytes.fromhex('000000000000000000000000000000000000000000000000000000000000006900000000000000000000000000000000000000000000000a4cc799563c380000000000000000000000000000d01ae1a708614948b2b5e0b7ab5be6afa01325c7')))
+        # print(argument_types)
+        # print(bytearray(bytes.fromhex('0000000000000000000000bb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c01')))
+
+
+        # todo : 这里不指定byte的参数就会有问题，不知道为什么，待修改 init error 
         for index in range(len(argument_types)):
-            arguments.append(self.get_random_argument(argument_types[index], function, index))
+            flag = False
+            for j in range (len(self.paramTypeList)):
+                if self.paramTypeList[j] == argument_types[index]:
+                    arguments.append(self.valueList[j])
+                    flag = True
+                    break
+            if flag ==False:
+                arguments.append(self.get_random_argument(argument_types[index], function, index))      
+        # if self.paramTypeList!=None:
+        if len(self.paramTypeList) != 0 :
+            arguments[3] = bytearray(bytes.fromhex('000000000000000000000000000000000000000000000000000000000000006900000000000000000000000000000000000000000000000a4cc799563c380000000000000000000000000000d01ae1a708614948b2b5e0b7ab5be6afa01325c7'))
+        # if self.falseSignatorys == None:
+        #     for index in range(len(argument_types)):
+        #         # if index==1:
+        #         #     arguments.append(0x0000000000000000000000bb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c01)
+        #         #     continue
+        #         arguments.append(self.get_random_argument(argument_types[index], function, index))
+        # else: 
+        #     for index in range(len(argument_types)):
+        #         print(type(self.signatoryIndex))
+        #         if index == int(self.signatoryIndex)+1:
+        #             falseSignatorys = self.getSignatorys(self.falseSignatorys[0])
+        #             arguments.append(falseSignatorys)   
+        #         else:
+        #             arguments.append(self.get_random_argument(argument_types[index], function, index))        
+        
+        print("argument = ",arguments)
         individual.append({
             "account": self.get_random_account(function),
             "contract": self.contract,
@@ -239,10 +378,60 @@ class Generator:
         return input
 
     def get_random_function_with_argument_types(self):
+        # # 这里先写死，function_hash
         function_hash = self.function_circular_buffer.head_and_rotate()
+
         if function_hash == "constructor":
             function_hash = self.function_circular_buffer.head_and_rotate()
-        return function_hash, self.interface[function_hash]
+        # print("function_hash = ",function_hash)
+        # print("interface  = ",self.interface[function_hash])        
+        
+        
+        # mulitichain 的function hash 
+        # function_hash='0x8d7d3eea'
+
+        # meter.io function hash
+        # function_hash = "0x05e2ca17"
+        # return function_hash, self.interface[function_hash]
+        # function_hash='0x8d7d3eea'
+        # print("function_hash = ",function_hash)
+        # print("interface  = ",self.interface[function_hash])  
+
+
+        # Li.Finance 的function hash '0xc2c134df'
+        # function_hash = '0x01c0a31a'
+
+        # # chainswap
+        # function_hash = '0xa653d60c'
+
+
+        # Qbridge
+        # function_hash = '0xb07e54bb'
+
+
+
+        # function_hash = self.function_circular_buffer.head_and_rotate()
+
+        return function_hash , self.interface[function_hash]
+
+    # 新增deposit 的 function hash选择
+    def get_random_deposit_with_argument_types(self):
+        function_hash = self.deposit_circular_buffer.head_and_rotate()
+        return function_hash , self.deposit_interface[function_hash]
+
+
+    def get_random_token_handler_func_with_argument_types(self,tokenFunc):
+        # 遍历字典
+        # todo 加入随机元素选择
+        canCallFunction = [] 
+        for key in self.tokenHandlerFuncHash:
+            if key != tokenFunc:
+                canCallFunction.append(self.tokenHandlerFuncHash[key])
+        # print(type(canCallFunction[0].keys()))
+        function_hash = list(canCallFunction[0].keys())[0]
+        function_interface =  self.interface[function_hash]
+        return function_hash, function_interface 
+
 
     #
     # TIMESTAMP
@@ -631,6 +820,7 @@ class Generator:
         elif type.startswith("address"):
             # Array
             if "[" in type and "]" in type:
+            # 这里先写死
                 sizes = self._get_array_sizes(argument_index, function, type)
                 array = []
                 for _ in range(sizes[0]):
@@ -644,11 +834,25 @@ class Generator:
                         new_array.append(array)
                     array = new_array
                 return array
+
+            
             # Single value
+            # Todo 一种是选择攻击账号，另一种是使用token的 address 池
             else:
                 if function in self.arguments_pool and argument_index in self.arguments_pool[function]:
-                    return self._get_random_argument_from_pool(function, argument_index)
-                return random.choice(self.accounts)
+                    address = self._get_random_argument_from_pool(function, argument_index)
+                # # 可以从attack 中选择地址
+                elif len(self.attack_contract_acount)!=0:
+                    #print("token_contract_account= ",self.token_contract_acount)
+                    # print(random.choice(self.token_contract_acount))
+                    # print(random.choice(self.attack_contract_acount))
+                    address = random.choice(self.attack_contract_acount)
+                else:
+                    address = random.choice(self.accounts)
+                
+                if address not in self.fake_address: 
+                    self.fake_address.append(address)
+                return address
 
         # String
         elif type.startswith("string"):
@@ -760,8 +964,10 @@ class Generator:
             if "[" in type and "]" in type:
                 sizes = self._get_array_sizes(argument_index, function, type)
                 array = []
+                # tuple应该不等于0
+                sizes[0]+=1
                 for _ in range(sizes[0]):
-                    array.append(self.get_random_tuple(type[1:-1],function, argument_index))
+                    array.append(self.get_random_tuple(type[1:-3],function, argument_index))
                     return array
             # Single value
             else:
@@ -796,6 +1002,71 @@ class Generator:
             else:
                 sizes.append(int(size))
         return sizes
+
+
+    def getSignatorys(self,signatory):
+        signatoryType = self.signatoryType["type"]
+
+        if signatoryType == 'tuple[]':
+            signatoryArr = []
+            tuple_val=[]
+            # print(type(self.signatoryType))
+            for key,item in self.signatoryType.items():
+                if key == 'type':
+                    continue
+                # print(signatory[key])
+
+                value = self.covertValue(item,signatory[key])
+                tuple_val.append(value)
+            # print(tuple_val)
+            # print(signatory)
+            # print(tuple(tuple_val))
+            signatoryArr.append(tuple(tuple_val))
+            # print(signatoryArr)
+            return signatoryArr
+        #print("------")
+
+    def covertValue(self,type,value):
+        if type.startswith("address"):
+            return value
+        elif type.startswith("uint"):
+            return int(value)
+        elif type.startswith("bytes1") or \
+             type.startswith("bytes2") or \
+             type.startswith("bytes3") or \
+             type.startswith("bytes4") or \
+             type.startswith("bytes5") or \
+             type.startswith("bytes6") or \
+             type.startswith("bytes7") or \
+             type.startswith("bytes8") or \
+             type.startswith("bytes9") or \
+             type.startswith("bytes10") or \
+             type.startswith("bytes11") or \
+             type.startswith("bytes12") or \
+             type.startswith("bytes13") or \
+             type.startswith("bytes14") or \
+             type.startswith("bytes15") or \
+             type.startswith("bytes16") or \
+             type.startswith("bytes17") or \
+             type.startswith("bytes18") or \
+             type.startswith("bytes19") or \
+             type.startswith("bytes20") or \
+             type.startswith("bytes21") or \
+             type.startswith("bytes22") or \
+             type.startswith("bytes23") or \
+             type.startswith("bytes24") or \
+             type.startswith("bytes25") or \
+             type.startswith("bytes26") or \
+             type.startswith("bytes27") or \
+             type.startswith("bytes28") or \
+             type.startswith("bytes29") or \
+             type.startswith("bytes30") or \
+             type.startswith("bytes31") or \
+             type.startswith("bytes32"):
+            length = int(type.replace("bytes", "").split("[")[0])
+            return bytearray(bytes.fromhex(value[2:]))
+                    
+        
 
 
 

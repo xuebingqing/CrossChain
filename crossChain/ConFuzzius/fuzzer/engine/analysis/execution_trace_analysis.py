@@ -120,6 +120,11 @@ class ExecutionTraceAnalyzer(OnTheFlyAnalysis):
 
         env.detector_executor.initialize_detectors()
 
+        # 新增开启token_type_check检查
+        env.detector_executor.uncheck_token_type.check_token_type = env.token_type_check
+        
+        # 新增开启signature_verification_missing 检查
+        env.detector_executor.signature_verification_missing.signatory_check = env.signatory_check
         for transaction_index, test in enumerate(indv.solution):
 
             transaction = test["transaction"]

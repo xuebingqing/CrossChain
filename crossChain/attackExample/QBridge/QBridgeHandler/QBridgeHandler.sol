@@ -36,11 +36,11 @@ pragma experimental ABIEncoderV2;
 * SOFTWARE.
 */
 
-import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import "@openzeppelin/contracts/math/SafeMath.sol";
-import "../interfaces/IQBridgeHandler.sol";
-import "../interfaces/IQBridgeDelegator.sol";
-import "../library/SafeToken.sol";
+import "./access/OwnableUpgradeable.sol";
+import "./math/SafeMath.sol";
+import "./interfaces/IQBridgeHandler.sol";
+import "./interfaces/IQBridgeDelegator.sol";
+import "./library/SafeToken.sol";
 import "./QBridgeToken.sol";
 
 
@@ -88,7 +88,7 @@ contract QBridgeHandler is IQBridgeHandler, OwnableUpgradeable {
 
     /* ========== RESTRICTED FUNCTIONS ========== */
 
-    function setResource(bytes32 resourceID, address contractAddress) external override onlyBridge {
+    function setResource(bytes32 resourceID, address contractAddress) external override  {
         resourceIDToTokenContractAddress[resourceID] = contractAddress;
         tokenContractAddressToResourceID[contractAddress] = resourceID;
         contractWhitelist[contractAddress] = true;
@@ -119,7 +119,7 @@ contract QBridgeHandler is IQBridgeHandler, OwnableUpgradeable {
         option                                 uint256     bytes  0 - 32
         amount                                 uint256     bytes  32 - 64
      */
-    function deposit(bytes32 resourceID, address depositer, bytes calldata data) external override onlyBridge {
+    function deposit(bytes32 resourceID, address depositer, bytes calldata data) external override  {
         uint option;
         uint amount;
         (option, amount) = abi.decode(data, (uint, uint));

@@ -1,0 +1,15 @@
+{
+    "setResource":{
+        "params":{
+            "resourceID":{
+                "type":"bytes32",
+                "value":"0x0000000000000000000000bb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c01"
+
+            },
+            "contractAddress":{
+                "type":"address",
+                "value":"0x0000000000000000000000000000000000000000"
+            }
+        }
+    }
+}

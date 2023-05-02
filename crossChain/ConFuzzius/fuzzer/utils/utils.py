@@ -9,6 +9,14 @@ import solcx
 import logging
 import eth_utils
 import subprocess
+import sys
+from eth_abi import encode_abi
+from eth_abi.exceptions import EncodingTypeError, ValueOutOfBounds, ParseError
+
+
+
+from copy import deepcopy, copy
+
 
 from web3 import Web3
 from .settings import LOGGING_LEVEL
@@ -45,21 +53,21 @@ def code_address(value):
 def code_bytes(value):
     return value.ljust(64, "0")
 
-def code_type(value, type):
-    if type == "bool":
-        return code_bool(value)
-    elif type.startswith("uint"):
-        return code_uint(value)
-    elif type.startswith("int"):
-        return code_int(value)
-    elif type == "address":
-        return code_address(value)
-    elif type.startswith("bytes"):
-        return code_bytes(value)
-    elif type.startswith('tuple'):
-        print('111111')
-    else:
-        raise Exception()
+# def code_type(value, type):
+#     if type == "bool":
+#         return code_bool(value)
+#     elif type.startswith("uint"):
+#         return code_uint(value)
+#     elif type.startswith("int"):
+#         return code_int(value)
+#     elif type == "address":
+#         return code_address(value)
+#     elif type.startswith("bytes"):
+#         return code_bytes(value)
+#     elif type.startswith('tuple'):
+#         print('111111')
+#     else:
+#         raise Exception()
 
 def run_command(cmd):
     FNULL = open(os.devnull, 'w')
@@ -87,15 +95,19 @@ def compile(solc_version, evm_version, source_code_file):
                 },
                 "evmVersion": evm_version,
                 "outputSelection": {
-                    source_code_file: {
-                        "*":
-                            [
-                                "abi",
-                                "evm.deployedBytecode",
-                                "evm.bytecode.object",
-                                "evm.legacyAssembly",
-                            ],
-                    }
+                    # source_code_file: {
+                    #     "*":
+                    #         [
+                    #             "abi",
+                    #             "evm.deployedBytecode",
+                    #             "evm.bytecode.object",
+                    #             "evm.legacyAssembly",
+                    #         ],
+                    # }
+                    	"*": {
+                            "": ["ast"],
+                            "*": ["abi", "metadata", "devdoc", "userdoc", "storageLayout", "evm.legacyAssembly", "evm.bytecode", "evm.deployedBytecode", "evm.methodIdentifiers", "evm.gasEstimates", "evm.assembly"]
+                        }
                 }
             }
         }, allow_paths='.')
@@ -107,6 +119,7 @@ def compile(solc_version, evm_version, source_code_file):
 
 def get_interface_from_abi(abi):
     #这里需要增加处理复合数据类型的逻辑
+    #print(abi)
     interface = {}
     for field in abi:
         if field['type'] == 'function':
@@ -155,6 +168,207 @@ def get_interface_from_abi(abi):
     if not "fallback" in interface:
         interface["fallback"] = []
     return interface
+
+
+def get_function_name_from_abi(abi):
+    function_name_list=[]
+    for field in abi:
+        if field['type'] == 'function':
+            function_name = field['name']
+            function_name_list.append(function_name)
+    return function_name_list
+
+def get_function_name_hash_from_abi(abi):
+    interface = {}
+    for field in abi:
+        if field['type'] == 'function':
+            function_name = field['name']
+            function_inputs = []
+            signature = function_name + '('
+            for i in range(len(field['inputs'])):
+                input_type = field['inputs'][i]['type']
+                # 处理tuple类型
+                if input_type=='tuple':
+                    #(xxx,xxx,xxx)的格式
+                    real_type='('
+                    internal_size=len(field['inputs'][i]['components'])
+                    for j in range(internal_size):
+                        internal_type=field['inputs'][i]['components'][j]['type']
+                        real_type+=internal_type
+                        if j < internal_size -1 :
+                            real_type+=','
+                    real_type+=')'
+                    input_type=real_type
+                if input_type=='tuple[]':
+                    # (xxx,xxx,xxx)的格式
+                    real_type='('
+                    internal_size=len(field['inputs'][i]['components'])
+                    for j in range(internal_size):
+                        internal_type=field['inputs'][i]['components'][j]['type']
+                        real_type+=internal_type
+                        if j < internal_size -1 :
+                            real_type+=','
+                    real_type+=')'
+                    input_type=real_type
+                    input_type+='[]'                
+                function_inputs.append(input_type)
+                signature += input_type
+                if i < len(field['inputs']) - 1:
+                    signature += ','
+            signature += ')'
+            hash = Web3.sha3(text=signature)[0:4].hex()
+            interface[function_name] = hash
+    return interface
+
+
+
+
+
+
+
+
+
+def has_deposit_function(abi):
+    interface={}
+    for field in abi:
+        if field['type'] == 'function':
+            function_name = field['name']
+            if "deposit" == function_name:
+                function_inputs = []
+                signature = function_name + '('
+                for i in range(len(field['inputs'])):
+                    input_type = field['inputs'][i]['type']
+                    # 处理tuple类型
+                    if input_type=='tuple':
+                        #(xxx,xxx,xxx)的格式
+                        real_type='('
+                        internal_size=len(field['inputs'][i]['components'])
+                        for j in range(internal_size):
+                            internal_type=field['inputs'][i]['components'][j]['type']
+                            real_type+=internal_type
+                            if j < internal_size -1 :
+                                real_type+=','
+                        real_type+=')'
+                        input_type=real_type
+                    if input_type=='tuple[]':
+                        # (xxx,xxx,xxx)的格式
+                        real_type='('
+                        internal_size=len(field['inputs'][i]['components'])
+                        for j in range(internal_size):
+                            internal_type=field['inputs'][i]['components'][j]['type']
+                            real_type+=internal_type
+                            if j < internal_size -1 :
+                                real_type+=','
+                        real_type+=')'
+                        input_type=real_type
+                        input_type+='[]'                
+                    function_inputs.append(input_type)
+                    signature += input_type
+                    if i < len(field['inputs']) - 1:
+                        signature += ','
+                signature += ')'
+                hash = Web3.sha3(text=signature)[0:4].hex()
+                interface[hash] = function_inputs
+    return interface
+                
+
+
+def get_interface_by_function_name(abi,functionName):
+    interface={}
+    for field in abi:
+        if field['type'] == 'function':
+            function_name = field['name']
+            if function_name ==  functionName:
+                function_inputs = []
+                signature = function_name + '('
+                for i in range(len(field['inputs'])):
+                    input_type = field['inputs'][i]['type']
+                    # 处理tuple类型
+                    if input_type=='tuple':
+                        #(xxx,xxx,xxx)的格式
+                        real_type='('
+                        internal_size=len(field['inputs'][i]['components'])
+                        for j in range(internal_size):
+                            internal_type=field['inputs'][i]['components'][j]['type']
+                            real_type+=internal_type
+                            if j < internal_size -1 :
+                                real_type+=','
+                        real_type+=')'
+                        input_type=real_type
+                    if input_type=='tuple[]':
+                        # (xxx,xxx,xxx)的格式
+                        real_type='('
+                        internal_size=len(field['inputs'][i]['components'])
+                        for j in range(internal_size):
+                            internal_type=field['inputs'][i]['components'][j]['type']
+                            real_type+=internal_type
+                            if j < internal_size -1 :
+                                real_type+=','
+                        real_type+=')'
+                        input_type=real_type
+                        input_type+='[]'                
+                    function_inputs.append(input_type)
+                    signature += input_type
+                    if i < len(field['inputs']) - 1:
+                        signature += ','
+                signature += ')'
+                hash = Web3.sha3(text=signature)[0:4].hex()
+                interface[hash] = function_inputs
+    return interface    
+
+
+
+
+
+
+
+
+def has_depositETH_funcion(abi):
+    interface={}
+    for field in abi:
+        if field['type'] == 'function':
+            function_name = field['name']
+            if "depositETH" == function_name:
+                function_inputs = []
+                signature = function_name + '('
+                for i in range(len(field['inputs'])):
+                    input_type = field['inputs'][i]['type']
+                    # 处理tuple类型
+                    if input_type=='tuple':
+                        #(xxx,xxx,xxx)的格式
+                        real_type='('
+                        internal_size=len(field['inputs'][i]['components'])
+                        for j in range(internal_size):
+                            internal_type=field['inputs'][i]['components'][j]['type']
+                            real_type+=internal_type
+                            if j < internal_size -1 :
+                                real_type+=','
+                        real_type+=')'
+                        input_type=real_type
+                    if input_type=='tuple[]':
+                        # (xxx,xxx,xxx)的格式
+                        real_type='('
+                        internal_size=len(field['inputs'][i]['components'])
+                        for j in range(internal_size):
+                            internal_type=field['inputs'][i]['components'][j]['type']
+                            real_type+=internal_type
+                            if j < internal_size -1 :
+                                real_type+=','
+                        real_type+=')'
+                        input_type=real_type
+                        input_type+='[]'                
+                    function_inputs.append(input_type)
+                    signature += input_type
+                    if i < len(field['inputs']) - 1:
+                        signature += ','
+                signature += ')'
+                hash = Web3.sha3(text=signature)[0:4].hex()
+                interface[hash] = function_inputs
+    return interface    
+
+
+
+
 
 def get_function_signature_mapping(abi):
     mapping = {}
@@ -284,3 +498,178 @@ def print_individual_solution_as_transaction(logger, individual_solution, color=
 def normalize_32_byte_hex_address(value):
     as_bytes = eth_utils.to_bytes(hexstr=value)
     return eth_utils.to_normalized_address(as_bytes[-20:])
+
+
+
+
+
+def parse_init_json_and_exec(init_json,interface_name,contract,account,env,interface) :
+    item = init_json.items()
+    tx_param = []
+    for k,v in item:
+        funcname = k
+        # 获取到function hash
+        tx_param.append(interface_name[funcname])
+
+        paramTypeList = []
+        valueList = []
+        individual = []
+        for pkey,pvalue in v.items():
+            for type,value in pvalue.items():
+                # print(type)
+                # print(value['type'])
+                paramType = value['type']
+                paramTypeList.append(paramType)
+
+                if paramType.startswith("address"):
+                    tx_param.append(value['value'])
+                    valueList.append(value['value'])
+                elif paramType.startswith("uint"):
+                    tx_param.append(int(value['value']))
+                    valueList.append(int(value['value']))                    
+                elif paramType.startswith("bytes1") or \
+                    paramType.startswith("bytes2") or \
+                    paramType.startswith("bytes3") or \
+                    paramType.startswith("bytes4") or \
+                    paramType.startswith("bytes5") or \
+                    paramType.startswith("bytes6") or \
+                    paramType.startswith("bytes7") or \
+                    paramType.startswith("bytes8") or \
+                    paramType.startswith("bytes9") or \
+                    paramType.startswith("bytes10") or \
+                    paramType.startswith("bytes11") or \
+                    paramType.startswith("bytes12") or \
+                    paramType.startswith("bytes13") or \
+                    paramType.startswith("bytes14") or \
+                    paramType.startswith("bytes15") or \
+                    paramType.startswith("bytes16") or \
+                    paramType.startswith("bytes17") or \
+                    paramType.startswith("bytes18") or \
+                    paramType.startswith("bytes19") or \
+                    paramType.startswith("bytes20") or \
+                    paramType.startswith("bytes21") or \
+                    paramType.startswith("bytes22") or \
+                    paramType.startswith("bytes23") or \
+                    paramType.startswith("bytes24") or \
+                    paramType.startswith("bytes25") or \
+                    paramType.startswith("bytes26") or \
+                    paramType.startswith("bytes27") or \
+                    paramType.startswith("bytes28") or \
+                    paramType.startswith("bytes29") or \
+                    paramType.startswith("bytes30") or \
+                    paramType.startswith("bytes31") or \
+                    paramType.startswith("bytes32"):
+                        length = int(paramType.replace("bytes", "").split("[")[0])
+                        tx_param.append(bytearray(bytes.fromhex(value['value'][2:])))
+                        valueList.append(bytearray(bytes.fromhex(value['value'][2:])))
+                
+
+            individual.append({
+                "account": account[0],
+                "contract": contract,
+                "amount": 0,
+                "arguments": tx_param,
+                "blocknumber": None,
+                "timestamp": None,
+                "gaslimit": 4500000,
+                "returndatasize": dict()
+            })
+
+            individual[-1]["call_return"] = None
+
+            individual[-1]["extcodesize"] = None
+
+            individual[-1]["returndatasize"] = None
+
+
+
+            solution = decode(individual,interface)
+                
+
+
+            # print(value['value'])
+
+            execution_function(solution,env) 
+
+        return paramTypeList,valueList
+
+
+        
+# def contruct_tx():
+
+
+
+# def exec_tx():
+
+
+def decode(individual,interface):
+    solution = []
+    for i in range(len(individual)):
+        transaction = {}
+        transaction["from"] = copy(individual[i]["account"])
+        transaction["to"] = copy(individual[i]["contract"])
+        transaction["value"] = copy(individual[i]["amount"])
+        transaction["gaslimit"] = copy(individual[i]["gaslimit"])
+        transaction["data"] = get_transaction_data_from_chromosome(individual,i,interface)
+
+        block = {}
+        if "timestamp" in individual[i] and individual[i]["timestamp"] is not None:
+            block["timestamp"] = copy(individual[i]["timestamp"])
+        if "blocknumber" in individual[i] and individual[i]["blocknumber"] is not None:
+            block["blocknumber"] = copy(individual[i]["blocknumber"])
+
+        global_state = {}
+        if "balance" in individual[i] and individual[i]["balance"] is not None:
+            global_state["balance"] = copy(individual[i]["balance"])
+        if "call_return" in individual[i] and individual[i]["call_return"] is not None\
+                and len(individual[i]["call_return"]) > 0:
+            global_state["call_return"] = copy(individual[i]["call_return"])
+        if "extcodesize" in individual[i] and individual[i]["extcodesize"] is not None\
+                and len(individual[i]["extcodesize"]) > 0:
+            global_state["extcodesize"] = copy(individual[i]["extcodesize"])
+
+        environment = {}
+        if "returndatasize" in individual[i] and individual[i]["returndatasize"] is not None:
+            environment["returndatasize"] = copy(individual[i]["returndatasize"])
+
+        input = {"transaction":transaction, "block" : block, "global_state" : global_state, "environment": environment}
+        solution.append(input)
+    return solution
+
+
+
+
+
+
+def get_transaction_data_from_chromosome(individual,i,interface):
+    data = ""
+    arguments = []
+    function = None
+    for j in range(len(individual[i]["arguments"])):
+        if not type(individual[i]["arguments"][j]) is bytearray and \
+                not type(individual[i]["arguments"][j]) is list and \
+                not type(individual[i]["arguments"][j]) is tuple and \
+                individual[i]["arguments"][j] in interface:
+            function = individual[i]["arguments"][j]
+            data += individual[i]["arguments"][j]
+        else:
+            arguments.append(individual[i]["arguments"][j])
+    try:
+        argument_types = [argument_type.replace(" storage", "").replace(" memory", "") for argument_type in interface[function]]                 
+        data += encode_abi(argument_types, arguments).hex()
+    except Exception as e:
+        sys.exit(-6)
+
+
+    return data
+
+
+
+def execution_function(solution,env):
+    for transaction_index, test in enumerate(solution):
+        transaction = test["transaction"]
+        _function_hash = transaction["data"][:10] if transaction["data"].startswith("0x") else transaction["data"][:8]
+
+        result = env.instrumented_evm.deploy_transaction(test)
+
+        # print(result)

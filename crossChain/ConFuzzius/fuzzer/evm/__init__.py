@@ -64,6 +64,8 @@ class InstrumentedEVM:
         self.chain = chain_class.from_genesis_header(AtomicDB(MyMemoryDB()), MAINNET_GENESIS_HEADER)
         self.logger = initialize_logger("EVM")
         self.accounts = list()
+        self.token_contract_acount=list()
+        self.attack_contract_accout=list()
         self.snapshot = None
         self.vm = None
 
@@ -233,5 +235,6 @@ class InstrumentedEVM:
 
     def create_fake_accounts(self):
         self.accounts.append(self.create_fake_account("0xcafebabecafebabecafebabecafebabecafebabe"))
+        # self.accounts.append(self.create_fake_account("0xcafebabecafebabecafebabecafebabecafebabe"))
         for address in settings.ATTACKER_ACCOUNTS:
             self.accounts.append(self.create_fake_account(address))

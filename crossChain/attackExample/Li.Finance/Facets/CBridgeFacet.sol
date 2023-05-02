@@ -1,49 +1,57 @@
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.7;
-
 import "../contracts/token/ERC20/ERC20.sol";
-import { ILiFi } from "../Interfaces/ILiFi.sol";
-import { IAnyswapRouter } from "../Interfaces/IAnyswapRouter.sol";
-import { LibDiamond } from "../Libraries/LibDiamond.sol";
 import { LibAsset } from "../Libraries/LibAsset.sol";
+import { ILiFi } from "../Interfaces/ILiFi.sol";
 import { LibSwap } from "../Libraries/LibSwap.sol";
-import { IAnyswapToken } from "../Interfaces/IAnyswapToken.sol";
+import { ICBridge } from "../Interfaces/ICBridge.sol";
 import { LibDiamond } from "../Libraries/LibDiamond.sol";
 
-contract AnyswapFacet is ILiFi {
+contract CBridgeFacet is ILiFi {
+    /* ========== Storage ========== */
+
+    bytes32 internal constant NAMESPACE = keccak256("com.lifi.facets.cbridge2");
+    struct Storage {
+        address cBridge;
+        uint64 cBridgeChainId;
+    }
+
     /* ========== Types ========== */
 
-    struct AnyswapData {
+    struct CBridgeData {
+        address receiver;
         address token;
-        address router;
         uint256 amount;
-        address recipient;
-        uint256 toChainId;
+        uint64 dstChainId;
+        uint64 nonce;
+        uint32 maxSlippage;
+    }
+
+    /* ========== Init ========== */
+
+    function initCbridge(address _cBridge, uint64 _chainId) external {
+        Storage storage s = getStorage();
+        LibDiamond.enforceIsContractOwner();
+        s.cBridge = _cBridge;
+        s.cBridgeChainId = _chainId;
+        emit Inited(s.cBridge, s.cBridgeChainId);
     }
 
     /* ========== Public Bridge Functions ========== */
 
-    /**
-     * @notice Bridges tokens via Anyswap
-     * @param _lifiData data used purely for tracking and analytics
-     * @param _anyswapData data specific to Anyswap
-     */
-    function startBridgeTokensViaAnyswap(LiFiData memory _lifiData, AnyswapData calldata _anyswapData) public payable {
-        if (_anyswapData.token != address(0)) {
-            address underlyingToken = IAnyswapToken(_anyswapData.token).underlying();
+    function startBridgeTokensViaCBridge(LiFiData memory _lifiData, CBridgeData calldata _cBridgeData) public payable {
+        if (_cBridgeData.token != address(0)) {
+            uint256 _fromTokenBalance = LibAsset.getOwnBalance(_cBridgeData.token);
 
-            uint256 _fromTokenBalance = LibAsset.getOwnBalance(underlyingToken);
-            LibAsset.transferFromERC20(underlyingToken, msg.sender, address(this), _anyswapData.amount);
+            LibAsset.transferFromERC20(_cBridgeData.token, msg.sender, address(this), _cBridgeData.amount);
 
             require(
-                LibAsset.getOwnBalance(underlyingToken) - _fromTokenBalance == _anyswapData.amount,
+                LibAsset.getOwnBalance(_cBridgeData.token) - _fromTokenBalance == _cBridgeData.amount,
                 "ERR_INVALID_AMOUNT"
             );
         } else {
-            require(msg.value == _anyswapData.amount, "ERR_INVALID_AMOUNT");
+            require(msg.value >= _cBridgeData.amount, "ERR_INVALID_AMOUNT");
         }
 
-        _startBridge(_anyswapData);
+        _startBridge(_cBridgeData);
 
         emit LiFiTransferStarted(
             _lifiData.transactionId,
@@ -58,31 +66,24 @@ contract AnyswapFacet is ILiFi {
         );
     }
 
-    /**
-     * @notice Performs a swap before bridging via Anyswap
-     * @param _lifiData data used purely for tracking and analytics
-     * @param _swapData an array of swap related data for performing swaps before bridging
-     * @param _anyswapData data specific to Anyswap
-     */
-    function swapAndStartBridgeTokensViaAnyswap(
+    function swapAndStartBridgeTokensViaCBridge(
         LiFiData memory _lifiData,
         LibSwap.SwapData[] calldata _swapData,
-        AnyswapData memory _anyswapData
+        CBridgeData memory _cBridgeData
     ) public payable {
-        if (_anyswapData.token != address(0)) {
-            address underlyingToken = IAnyswapToken(_anyswapData.token).underlying();
-            uint256 _fromTokenBalance = LibAsset.getOwnBalance(underlyingToken);
+        if (_cBridgeData.token != address(0)) {
+            uint256 _fromTokenBalance = LibAsset.getOwnBalance(_cBridgeData.token);
 
             // Swap
             for (uint8 i; i < _swapData.length; i++) {
                 LibSwap.swap(_lifiData.transactionId, _swapData[i]);
             }
 
-            uint256 _postSwapBalance = LibAsset.getOwnBalance(underlyingToken) - _fromTokenBalance;
+            uint256 _postSwapBalance = LibAsset.getOwnBalance(_cBridgeData.token) - _fromTokenBalance;
 
             require(_postSwapBalance > 0, "ERR_INVALID_AMOUNT");
 
-            _anyswapData.amount = _postSwapBalance;
+            _cBridgeData.amount = _postSwapBalance;
         } else {
             uint256 _fromBalance = address(this).balance;
 
@@ -91,16 +92,14 @@ contract AnyswapFacet is ILiFi {
                 LibSwap.swap(_lifiData.transactionId, _swapData[i]);
             }
 
-            require(address(this).balance - _fromBalance >= _anyswapData.amount, "ERR_INVALID_AMOUNT");
-
             uint256 _postSwapBalance = address(this).balance - _fromBalance;
 
             require(_postSwapBalance > 0, "ERR_INVALID_AMOUNT");
 
-            _anyswapData.amount = _postSwapBalance;
+            _cBridgeData.amount = _postSwapBalance;
         }
 
-        _startBridge(_anyswapData);
+        _startBridge(_cBridgeData);
 
         emit LiFiTransferStarted(
             _lifiData.transactionId,
@@ -117,34 +116,50 @@ contract AnyswapFacet is ILiFi {
 
     /* ========== Internal Functions ========== */
 
-    /**
-     * @dev Conatains the business logic for the bridge via Anyswap
-     * @param _anyswapData data specific to Anyswap
+    /*
+     * @dev Conatains the business logic for the bridge via CBridge
+     * @param _cBridgeData data specific to CBridge
      */
-    function _startBridge(AnyswapData memory _anyswapData) internal {
-        // Check chain id
-        require(block.chainid != _anyswapData.toChainId, "Cannot bridge to the same network.");
+    function _startBridge(CBridgeData memory _cBridgeData) internal {
+        Storage storage s = getStorage();
+        address bridge = _bridge();
 
-        if (_anyswapData.token != address(0)) {
-            // Give Anyswap approval to bridge tokens
-            LibAsset.approveERC20(
-                IERC20(IAnyswapToken(_anyswapData.token).underlying()),
-                _anyswapData.router,
-                _anyswapData.amount
-            );
+        // Do CBridge stuff
+        require(s.cBridgeChainId != _cBridgeData.dstChainId, "Cannot bridge to the same network.");
 
-            IAnyswapRouter(_anyswapData.router).anySwapOutUnderlying(
-                _anyswapData.token,
-                _anyswapData.recipient,
-                _anyswapData.amount,
-                _anyswapData.toChainId
+        if (LibAsset.isNativeAsset(_cBridgeData.token)) {
+            ICBridge(bridge).sendNative(
+                _cBridgeData.receiver,
+                _cBridgeData.amount,
+                _cBridgeData.dstChainId,
+                _cBridgeData.nonce,
+                _cBridgeData.maxSlippage
             );
         } else {
-            IAnyswapRouter(_anyswapData.router).anySwapOutNative{ value: _anyswapData.amount }(
-                _anyswapData.token,
-                _anyswapData.recipient,
-                _anyswapData.toChainId
+            // Give CBridge approval to bridge tokens
+            LibAsset.approveERC20(IERC20(_cBridgeData.token), bridge, _cBridgeData.amount);
+            // solhint-disable check-send-result
+            ICBridge(bridge).send(
+                _cBridgeData.receiver,
+                _cBridgeData.token,
+                _cBridgeData.amount,
+                _cBridgeData.dstChainId,
+                _cBridgeData.nonce,
+                _cBridgeData.maxSlippage
             );
+        }
+    }
+
+    function _bridge() internal view returns (address) {
+        Storage storage s = getStorage();
+        return s.cBridge;
+    }
+
+    function getStorage() internal pure returns (Storage storage s) {
+        bytes32 namespace = NAMESPACE;
+        // solhint-disable-next-line no-inline-assembly
+        assembly {
+            s.slot := namespace
         }
     }
 }

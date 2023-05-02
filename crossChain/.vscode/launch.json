@@ -11,12 +11,98 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": true,
+            // args Mutilchain 的参数
             "args":[
-                "-s","~/crossChain/attackExample/Li.Finance/Facets/CBridgeFacet_mod.sol",
-                "--solc", "v0.8.17" ,
-                "-g", "20"
+                "-s","~/crossChain/attackExample/multichain/AnyswapV4Router.sol",
+                //"-s","/home/xue/crossChain/ConFuzzius/examples/TokenSale/contracts/Migrations.sol",
+                "-c","AnyswapV4Router",
+                "--solc", "v0.8.10" ,
+                "-g", "20",
+                "--evm","byzantium",
+                "--token_contract","~/crossChain/attackExample/multichain/WETH9.sol",
+                "--token_solc","v0.4.20",
+                "--attack_contract","~/crossChain/attackExample/multichain/hack.sol",
+                "--attack_solc","v0.8.10",
+                "--attack_contract_contract","Exploit"
             ]
+            // args Meter 的参数
+            // "args":[
+            //     "-s","~/crossChain/attackExample/Meter/Bridge_mod.sol",
+            //     //"-s","/home/xue/crossChain/ConFuzzius/examples/TokenSale/contracts/Migrations.sol",
+            //     "-c","Bridge",
+            //     "--solc", "v0.6.4" ,
+            //     "-g", "20",
+            //     "--evm","byzantium",
+            //     "--token_contract","~/crossChain/attackExample/multichain/WETH9.sol",
+            //     "--token_solc","v0.4.20",
+            //     "--attack_contract","~/crossChain/attackExample/Meter/ERC20Handler_mod.sol",
+            //     "--attack_solc","v0.6.4",
+
+            //     // 新增token的type
+            //     "--token_type","~/crossChain/attackExample/Meter/token.json"
+            //     "--attack_contract_contract","ERC20Handler"
+            
+            // ]
+
+            // args Mutilchain 的参数
+            // "args":[
+            //     "-s","~/crossChain/attackExample/Li.Finance/Facets/CBridgeFacet_mod.sol",
+            //     //"-s","/home/xue/crossChain/ConFuzzius/examples/TokenSale/contracts/Migrations.sol",
+            //     //"-c","Bridge",
+            //     "--solc", "v0.8.17" ,
+            //     "-g", "20",
+            //     "--evm","byzantium",
+            //     "--token_contract","~/crossChain/attackExample/multichain/WETH9.sol",
+            //     "--token_solc","v0.4.20",
+            //     "--attack_contract","~/crossChain/attackExample/Meter/ERC20Handler_mod.sol",
+            //     "--attack_solc","v0.6.4",
+
+            //     // 新增token的type
+            //     // "--token_type","~/crossChain/attackExample/Meter/token.json"
+            //     "--attack_contract_contract","ERC20Handler"            
+            // ]
+
+            // args chainswap 的参数
+            // "args":[
+            //     "-s","~/crossChain/attackExample/chainswap_mod/InitializableProductProxy.sol",
+            //     //"-s","/home/xue/crossChain/ConFuzzius/examples/TokenSale/contracts/Migrations.sol",
+            //     "-c","MappingToken",
+            //     "--solc", "v0.6.12" ,
+            //     "-g", "20",
+            //     "--evm","byzantium",
+            //     "--token_contract","~/crossChain/attackExample/multichain/WETH9.sol",
+            //     "--token_solc","v0.4.20",
+            //     "--attack_contract","~/crossChain/attackExample/Meter/ERC20Handler_mod.sol",
+            //     "--attack_solc","v0.6.4",
+            //     "--signatory","~/crossChain/attackExample/chainswap_mod/signatory.json"
+
+            //     // 新增token的type
+            //     // "--token_type","~/crossChain/attackExample/Meter/token.json"
+            //     "--attack_contract_contract","ERC20Handler"
+            // ]
+
+            // args Qbridge 的参数
+            // "args":[
+            //     "-s","~/crossChain/attackExample/QBridge/QBridgeHandler/QBridgeHandler.sol",
+            //     //"-s","/home/xue/crossChain/ConFuzzius/examples/TokenSale/contracts/Migrations.sol",
+            //     "-c","QBridgeHandler",
+            //     "--solc", "v0.6.12" ,
+            //     "-g", "20",
+            //     "--evm","byzantium",
+            //     "--token_contract","~/crossChain/attackExample/multichain/WETH9.sol",
+            //     "--token_solc","v0.4.20",
+            //     "--attack_contract","~/crossChain/attackExample/Meter/ERC20Handler_mod.sol",
+            //     "--attack_solc","v0.6.4",
+            //     // "--signatory","~/crossChain/attackExample/chainswap_mod/signatory.json"
+            //     "--init_json","~/crossChain/attackExample/QBridge/init.json"
+
+            //     // 新增token的type
+            //     // "--token_type","~/crossChain/attackExample/Meter/token.json"
+            //     "--attack_contract_contract","ERC20Handler"
+            // ]
+
+
+
         }
     ]
 }
-
